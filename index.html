@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Dispatch — Grouped Import</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+<style>
+:root{
+  --ink:#14181C; --ink-soft:#262B31; --paper:#F2F4F3; --surface:#FFFFFF;
+  --line:#DADFDD; --line-strong:#B7BEBB; --amber:#E8A33D; --teal:#2B7A78;
+  --text:#1B1F23; --text-soft:#5B6470; --bad:#D6455D; --bad-bg:#FBE8EC;
+  --radius:8px; --tabbar-h:58px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;overscroll-behavior:none;}
+body{
+  font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper);color:var(--text);
+  font-size:15px;display:flex;flex-direction:column;height:100dvh;overflow:hidden;
+}
+.mono{font-family:'IBM Plex Mono',monospace;}
+button{font-family:inherit;cursor:pointer;-webkit-appearance:none;}
+input,select,textarea{font-family:inherit;font-size:16px;} /* 16px avoids iOS zoom-on-focus */
+
+/* ===== TOP BAR (mini, mobile-first) ===== */
+.topbar-mini{
+  background:var(--ink);color:#fff;flex-shrink:0;
+  padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding-top:calc(10px + env(safe-area-inset-top));
+}
+.topbar-mini h1{font-size:14px;margin:0;font-weight:700;letter-spacing:.01em;}
+.topbar-mini .sub{font-size:11px;color:#9AA3AD;font-family:'IBM Plex Mono',monospace;}
+.topbar-actions{display:flex;gap:6px;}
+.icon-round{
+  width:38px;height:38px;border-radius:50%;background:var(--ink-soft);border:1px solid #3A4149;
+  color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.icon-round svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.icon-round.amber{background:var(--amber);color:var(--ink);border-color:var(--amber);}
+
+/* ===== VIEWS ===== */
+.views{flex:1;min-height:0;position:relative;}
+.view{position:absolute;inset:0;display:none;flex-direction:column;overflow:hidden;}
+.view.active{display:flex;}
+
+/* ===== BOTTOM TAB BAR (mobile-first) ===== */
+.bottom-tabs{
+  height:var(--tabbar-h);flex-shrink:0;background:var(--surface);border-top:1px solid var(--line);
+  display:flex;padding-bottom:env(safe-area-inset-bottom);
+}
+.tab-btn{
+  flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;color:var(--text-soft);font-size:11px;font-weight:500;
+}
+.tab-btn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.tab-btn.active{color:var(--amber);}
+.tab-badge{
+  position:absolute;margin-left:14px;margin-top:-4px;background:var(--bad);color:#fff;
+  font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;font-family:'IBM Plex Mono',monospace;
+}
+
+/* ===== MAP VIEW ===== */
+#mapWrap{flex:1;position:relative;}
+#mapbox{position:absolute;inset:0;}
+.token-warning{
+  position:absolute;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:10px;padding:30px;text-align:center;z-index:5;
+}
+.token-warning code{background:var(--surface);border:1px solid var(--line);padding:2px 6px;border-radius:4px;font-size:12px;}
+
+.legend-fab{
+  position:absolute;bottom:16px;right:14px;z-index:6;
+  background:var(--surface);border:1px solid var(--line);border-radius:24px;
+  padding:9px 14px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px;
+  box-shadow:0 3px 10px rgba(0,0,0,.18);
+}
+.legend-fab svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;}
+
+.legend-sheet{
+  position:absolute;left:0;right:0;bottom:0;z-index:7;background:var(--surface);
+  border-top-left-radius:16px;border-top-right-radius:16px;box-shadow:0 -4px 20px rgba(0,0,0,.2);
+  max-height:60%;display:none;flex-direction:column;
+}
+.legend-sheet.show{display:flex;}
+.legend-sheet-head{
+  padding:14px 16px 8px;display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid var(--line);
+}
+.legend-sheet-head h3{margin:0;font-size:14px;}
+.legend-sheet-body{overflow-y:auto;padding:6px 0;}
+.legend-row{
+  display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);
+}
+.legend-row:active{background:var(--paper);}
+.legend-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;}
+.legend-info{flex:1;min-width:0;}
+.legend-name{font-weight:600;font-size:13.5px;}
+.legend-meta{font-size:11.5px;color:var(--text-soft);margin-top:1px;}
+.legend-pax{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--text-soft);}
+.legend-pax.over{color:var(--bad);font-weight:700;}
+
+.marker-pin{
+  width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+  border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:pointer;
+}
+.marker-pin.selected{border:3px solid var(--ink);}
+.marker-pin-label{
+  transform:rotate(45deg);width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  font-size:10.5px;font-weight:800;color:#fff;font-family:'IBM Plex Mono',monospace;
+}
+
+/* ===== LIST VIEW ===== */
+.list-toolbar{padding:12px 14px 8px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0;}
+.search-input{
+  width:100%;border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;font-size:15px;
+}
+.list-scroll{flex:1;overflow-y:auto;background:var(--surface);}
+.booking-row{
+  display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);
+}
+.booking-row.selected{background:#FDF3E3;}
+.booking-check{width:22px;height:22px;flex-shrink:0;}
+.booking-body{flex:1;min-width:0;}
+.booking-name{font-weight:600;font-size:14.5px;}
+.booking-meta{font-size:12px;color:var(--text-soft);margin-top:2px;font-family:'IBM Plex Mono',monospace;}
+.booking-group-chip{
+  display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+  padding:3px 9px;border-radius:11px;margin-top:5px;color:#fff;
+}
+.booking-actions{display:flex;gap:4px;flex-shrink:0;}
+.tap-btn{
+  width:36px;height:36px;border-radius:50%;background:none;border:1px solid transparent;
+  color:var(--text-soft);display:flex;align-items:center;justify-content:center;
+}
+.tap-btn:active{background:var(--paper);}
+.tap-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.empty-state{padding:60px 24px;text-align:center;color:var(--text-soft);font-size:13.5px;}
+
+/* ===== GROUPS VIEW ===== */
+.groups-toolbar{
+  padding:12px 14px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0;
+  display:flex;gap:8px;flex-wrap:wrap;
+}
+.groups-scroll{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;}
+.group-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+.group-card-bar{height:5px;}
+.group-card-body{padding:12px 14px;}
+.group-card-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+.group-card-name{font-weight:700;font-size:14.5px;}
+.group-card-pax{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text-soft);}
+.group-card-pax.over{color:var(--bad);font-weight:700;}
+.group-cap-bar{height:5px;border-radius:3px;background:var(--paper);overflow:hidden;margin-top:8px;}
+.group-cap-fill{height:100%;}
+.group-cap-fill.over{background:var(--bad) !important;}
+.group-card-guide{font-size:12.5px;color:var(--text-soft);margin-top:7px;}
+.group-card-actions{display:flex;gap:6px;margin-top:10px;}
+.chip-btn{
+  flex:1;border:1px solid var(--line);background:var(--paper);border-radius:6px;padding:8px 6px;
+  font-size:11.5px;font-weight:600;color:var(--text);display:flex;align-items:center;justify-content:center;gap:5px;
+}
+.chip-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.chip-btn:active{background:#E9ECEB;}
+
+/* ===== FLOATING SELECTION BAR (bottom sheet on mobile) ===== */
+.selbar{
+  position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--ink);color:#fff;
+  border-top-left-radius:16px;border-top-right-radius:16px;box-shadow:0 -4px 20px rgba(0,0,0,.3);
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom));display:none;flex-direction:column;gap:10px;
+}
+.selbar.show{display:flex;}
+.selbar-top{display:flex;justify-content:space-between;align-items:center;}
+.selbar-count{font-weight:700;font-size:14px;}
+.selbar-close{background:none;border:none;color:#9AA3AD;}
+.selbar-close svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.selbar select{
+  width:100%;background:var(--ink-soft);color:#fff;border:1px solid #3A4149;border-radius:8px;
+  padding:11px 10px;font-size:15px;
+}
+.selbar-row{display:flex;gap:8px;}
+.selbar-row .btn{flex:1;justify-content:center;}
+
+/* ===== SHARED BUTTONS ===== */
+.btn{
+  border:1px solid var(--line);background:var(--surface);color:var(--text);
+  padding:10px 16px;border-radius:8px;font-size:13.5px;font-weight:600;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+}
+.btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.btn-amber{background:var(--amber);color:var(--ink);border-color:var(--amber);}
+.btn-ghost{background:var(--ink-soft);color:#fff;border-color:#3A4149;}
+.btn-danger{color:var(--bad);border-color:var(--bad);background:none;}
+.btn-block{width:100%;justify-content:center;}
+.btn-sm{padding:7px 11px;font-size:12.5px;}
+
+/* ===== MODALS / SHEETS ===== */
+.overlay{position:fixed;inset:0;background:rgba(20,24,28,.55);display:none;align-items:flex-end;justify-content:center;z-index:80;}
+.overlay.show{display:flex;}
+.sheet{
+  background:var(--surface);width:100%;max-width:560px;border-top-left-radius:18px;border-top-right-radius:18px;
+  max-height:88vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);
+}
+.sheet-head{padding:16px 18px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);}
+.sheet-head h2{margin:0;font-size:16px;}
+.sheet-close{background:none;border:none;color:var(--text-soft);}
+.sheet-close svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.sheet-body{padding:16px 18px;overflow-y:auto;}
+.sheet-foot{padding:12px 18px 16px;border-top:1px solid var(--line);display:flex;gap:8px;}
+.form-row{margin-bottom:14px;}
+.form-row label{display:block;font-size:12px;font-weight:600;color:var(--text-soft);margin-bottom:5px;}
+.form-row input,.form-row textarea{
+  width:100%;border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+}
+.form-row textarea{resize:vertical;min-height:160px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.5;}
+.form-2col{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.hint{font-size:12px;color:var(--text-soft);margin-top:8px;line-height:1.5;}
+.parse-preview{border:1px solid var(--line);border-radius:8px;margin-top:12px;max-height:220px;overflow-y:auto;}
+.parse-row{padding:9px 12px;border-bottom:1px solid var(--line);font-size:12.5px;}
+.parse-row:last-child{border-bottom:none;}
+.parse-row b{font-weight:700;}
+
+.toast{
+  position:fixed;left:50%;transform:translateX(-50%) translateY(10px);
+  bottom:calc(var(--tabbar-h) + 16px);background:var(--ink);color:#fff;padding:10px 18px;border-radius:22px;
+  font-size:13px;opacity:0;transition:opacity .2s,transform .2s;z-index:100;pointer-events:none;max-width:90vw;text-align:center;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+.mapboxgl-popup-content{font-family:'IBM Plex Sans',sans-serif;padding:12px 14px;border-radius:10px;}
+.popup-group{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin-bottom:3px;}
+.popup-name{font-weight:700;font-size:14px;}
+.popup-meta{font-size:12px;color:var(--text-soft);margin-top:2px;font-family:'IBM Plex Mono',monospace;}
+.popup-btn{margin-top:8px;font-size:12px;background:none;border:none;padding:0;display:block;cursor:pointer;}
+
+/* ===== DESKTOP (progressive enhancement, mobile-first base above) ===== */
+@media (min-width:860px){
+  body{font-size:14px;}
+  .bottom-tabs{display:none;}
+  .views{position:relative;}
+  .view{position:relative;display:flex !important;}
+  #view-list,#view-groups{display:none !important;}
+  #view-map{flex-direction:row;}
+  .desktop-side{display:flex !important;}
+  .list-scroll,.groups-scroll{max-width:320px;}
+  .desktop-col{width:320px;flex-shrink:0;border-left:1px solid var(--line);background:var(--surface);
+    display:flex;flex-direction:column;overflow:hidden;}
+  .desktop-col.left{border-left:none;border-right:1px solid var(--line);}
+  #mapWrap{flex:1;}
+  .legend-fab{display:none;}
+  .selbar{left:auto;right:20px;bottom:20px;max-width:420px;border-radius:16px;}
+}
+@media (max-width:859px){
+  .desktop-side{display:none !important;}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar-mini">
+  <div>
+    <h1>Dispatch — Grouped Import</h1>
+    <div class="sub" id="headerStats">0 groups · 0 bookings</div>
+  </div>
+  <div class="topbar-actions">
+    <button class="icon-round" id="btnOpenCopy" title="Copy grouped text">
+      <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 011-1h10"/></svg>
+    </button>
+    <button class="icon-round amber" id="btnOpenImport" title="Import grouped text">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="views">
+
+  <!-- MAP VIEW (also the desktop three-column home) -->
+  <div class="view active" id="view-map">
+    <div class="desktop-col left desktop-side" id="desktopList"></div>
+
+    <div id="mapWrap">
+      <div id="mapbox">
+        <div class="token-warning" id="tokenWarning" style="display:none;">
+          <svg viewBox="0 0 24 24" width="30" height="30" stroke="#8B93A1" fill="none" stroke-width="1.5"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+          <div><b>Add your Mapbox token.</b><br>Set <code>MAPBOX_TOKEN</code> near the top of the script.</div>
+        </div>
+      </div>
+      <button class="legend-fab" id="btnLegend">
+        <svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3 2.5-5 5-5s5 2 5 5M14 20c0-2.2 1.6-4 4-4.2"/></svg>
+        Groups
+      </button>
+      <div class="legend-sheet" id="legendSheet">
+        <div class="legend-sheet-head">
+          <h3>Groups on map</h3>
+          <button class="sheet-close" id="btnLegendClose"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+        <div class="legend-sheet-body" id="legendBody"></div>
+      </div>
+    </div>
+
+    <div class="desktop-col desktop-side" id="desktopGroups"></div>
+  </div>
+
+  <!-- LIST VIEW (mobile) -->
+  <div class="view" id="view-list">
+    <div class="list-toolbar">
+      <input type="text" class="search-input" id="searchBooking" placeholder="Search name or phone…">
+    </div>
+    <div class="list-scroll" id="listBody"></div>
+  </div>
+
+  <!-- GROUPS VIEW (mobile) -->
+  <div class="view" id="view-groups">
+    <div class="groups-toolbar">
+      <button class="btn btn-sm btn-amber" id="btnNewGroupMobile"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New group</button>
+    </div>
+    <div class="groups-scroll" id="groupsBody"></div>
+  </div>
+
+</div>
+
+<nav class="bottom-tabs">
+  <button class="tab-btn active" data-tab="map">
+    <svg viewBox="0 0 24 24"><path d="M9 20l-5-2V4l5 2 6-2 5 2v14l-5-2-6 2z"/><path d="M9 6v14M15 4v14"/></svg>
+    Map
+  </button>
+  <button class="tab-btn" data-tab="list">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+    Bookings
+  </button>
+  <button class="tab-btn" data-tab="groups">
+    <svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3 2.5-5 5-5s5 2 5 5M14 20c0-2.2 1.6-4 4-4.2"/></svg>
+    Groups
+  </button>
+</nav>
+
+<!-- SELECTION BAR -->
+<div class="selbar" id="selBar">
+  <div class="selbar-top">
+    <span class="selbar-count" id="selCount">0 selected</span>
+    <button class="selbar-close" id="selClose"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <select id="selMoveGroup"><option value="">Move to group…</option></select>
+  <div class="selbar-row">
+    <button class="btn btn-amber" id="selMoveBtn">Move</button>
+    <button class="btn btn-ghost" id="selNewGroupBtn">New group</button>
+  </div>
+  <div class="selbar-row">
+    <button class="btn btn-danger" id="selDeleteBtn">Delete</button>
+  </div>
+</div>
+
+<!-- IMPORT SHEET -->
+<div class="overlay" id="modalImport">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>Import grouped bookings</h2>
+      <button class="sheet-close" data-close><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-row">
+        <label>Paste the full grouped export (GROUP header, dashes, bookings, ======== between groups)</label>
+        <textarea id="importArea" placeholder="GROUP 1 (EN) -   16 PAX  -   :&#10;&#10;----------------------------------------------------------------------&#10;Lead traveler: ..."></textarea>
+      </div>
+      <button class="btn btn-amber btn-block" id="btnParseImport">Parse</button>
+      <div class="parse-preview" id="importPreview" style="display:none;"></div>
+      <div class="hint">Groups and bookings are added fresh — this doesn't overwrite what's already loaded, so you can import several batches in a row.</div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn" data-close style="flex:1;justify-content:center;">Cancel</button>
+      <button class="btn btn-amber" id="btnConfirmImport" style="flex:1;justify-content:center;display:none;">Add to dashboard</button>
+    </div>
+  </div>
+</div>
+
+<!-- COPY SHEET -->
+<div class="overlay" id="modalCopy">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>Copy grouped bookings</h2>
+      <button class="sheet-close" data-close><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <button class="btn btn-amber btn-block" id="btnCopyAllFull" style="margin-bottom:10px;">Copy all groups — full details</button>
+      <button class="btn btn-block" id="btnCopyAllNameMap" style="margin-bottom:10px;">Copy all groups — name + map only</button>
+      <button class="btn btn-block" id="btnCopySummary">Copy summary (G#, guide, pax)</button>
+    </div>
+  </div>
+</div>
+
+<!-- GROUP EDIT SHEET -->
+<div class="overlay" id="modalGroup">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2 id="groupModalTitle">New group</h2>
+      <button class="sheet-close" data-close><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-row"><label>Group name</label><input type="text" id="g_name" placeholder="e.g. Group 3 (EN)"></div>
+      <div class="form-2col">
+        <div class="form-row"><label>Chauffeur name</label><input type="text" id="g_chauffeur" placeholder="e.g. Hassan"></div>
+        <div class="form-row"><label>Guide name</label><input type="text" id="g_guide" placeholder="e.g. Mouad"></div>
+      </div>
+      <div class="form-2col">
+        <div class="form-row"><label>Max pax</label><input type="number" id="g_cap" value="17" min="1"></div>
+        <div class="form-row"><label>Color</label><input type="color" id="g_color" value="#2B7A78" style="height:44px;padding:2px;"></div>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-danger" id="btnDeleteGroup" style="display:none;">Delete</button>
+      <button class="btn" data-close style="flex:1;justify-content:center;">Cancel</button>
+      <button class="btn btn-amber" id="btnSaveGroup" style="flex:1;justify-content:center;">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ CONFIG ============ */
+const MAPBOX_TOKEN = "pk.eyJ1Ijoib3VjaGluNTVlZGN4IiwiYSI6ImNtaXJ1MzVrNDA2Y2ozY3NhOXoxcng3NnEifQ.6yBtRfXRlgQ8vlmsYrRS2w";
+
+/* ============ STORAGE ============ */
+const BK_KEY = "gi_bookings_v1", GR_KEY = "gi_groups_v1";
+function loadB(){ try{return JSON.parse(localStorage.getItem(BK_KEY))||[];}catch(e){return [];} }
+function saveB(){ localStorage.setItem(BK_KEY, JSON.stringify(state.bookings)); }
+function loadG(){ try{return JSON.parse(localStorage.getItem(GR_KEY))||[];}catch(e){return [];} }
+function saveG(){ localStorage.setItem(GR_KEY, JSON.stringify(state.groups)); }
+
+const PALETTE = ["#2B7A78","#E8A33D","#6C63B5","#3E8E7E","#C4574A","#4A7FBD","#8A9A5B","#B5654D","#5C6BC0","#D08A3E","#4E9C8F","#9C5C8A"];
+
+const state = {
+  bookings: loadB(),
+  groups: loadG(),
+  selectedIds: new Set(),
+  mapFilterGroup: null,
+  searchQuery: "",
+  map: null,
+  markers: {},
+  hasFitOnce: false
+};
+
+function uid(p){ return p + Math.random().toString(36).slice(2,9).toUpperCase(); }
+function escapeHtml(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function toast(msg){
+  const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._timer); t._timer=setTimeout(()=>t.classList.remove("show"),2200);
+}
+function getGroup(id){ return state.groups.find(g=>g.id===id); }
+function groupPax(id){ return state.bookings.filter(b=>b.groupId===id).reduce((s,b)=>s+b.pax,0); }
+
+/* ============ PARSER: single flat blocks (Lead traveler / Phone / Email / Pax / Pick up location) ============ */
+function parseBookingBlocks(text){
+  const blocks = text.split(/\n\s*\n/).map(b=>b.trim()).filter(b=>b.length>0);
+  let lastDate = new Date().toISOString().slice(0,10);
+  const results = [];
+  blocks.forEach(block=>{
+    const dateMatch = block.match(/^(\d{4}-\d{2}-\d{2})\s*$/m);
+    if(dateMatch) lastDate = dateMatch[1];
+    const nameMatch = block.match(/Lead traveler:\s*(.+)/i);
+    const phoneMatch = block.match(/\+\d{7,15}/);
+    const emailMatch = block.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+    const paxMatch = block.match(/Pax:\s*(\d+)/i);
+    const coordMatch = block.match(/maps\/place\/(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+    if(!nameMatch && !coordMatch) return;
+    results.push({
+      id: uid("BK"),
+      name: nameMatch ? nameMatch[1].trim() : "Unnamed traveler",
+      phone: phoneMatch ? phoneMatch[0] : "",
+      email: emailMatch ? emailMatch[0] : "",
+      pax: paxMatch ? parseInt(paxMatch[1]) : 1,
+      lat: coordMatch ? parseFloat(coordMatch[1]) : null,
+      lng: coordMatch ? parseFloat(coordMatch[2]) : null,
+      date: lastDate,
+      groupId: null
+    });
+  });
+  return results;
+}
+
+/* ============ PARSER: full grouped export ============
+   GROUP 1 (EN) -   16 PAX  -   : Guide name
+   
+   ----------------------------------------------------------------------
+   Lead traveler: ...
+   ...
+   
+   ======================================== (separates groups)          */
+function parseGroupedExport(text){
+  const segments = text.split(/\n[ \t]*={3,}[ \t]*\n/).map(s=>s.trim()).filter(Boolean);
+  const groups = [], bookings = [];
+  let colorIdx = state.groups.length;
+
+  segments.forEach(seg=>{
+    const lines = seg.split(/\r?\n/);
+    let i = 0;
+    while(i<lines.length && lines[i].trim()==="") i++;
+    const headerLine = (lines[i]||"").trim();
+    i++;
+    while(i<lines.length && !/^-{5,}\s*$/.test(lines[i].trim())) i++;
+    i++; // skip the dashes line itself
+    const bodyText = lines.slice(i).join("\n");
+
+    const headerMatch = headerLine.match(/^(.+?)\s*-\s*(\d+)\s*PAX\s*-\s*:\s*(.*)$/i);
+    let name = headerLine || `Group ${state.groups.length + groups.length + 1}`;
+    let guide = "", parsedCap = null;
+    if(headerMatch){
+      name = headerMatch[1].trim();
+      parsedCap = parseInt(headerMatch[2]);
+      guide = headerMatch[3].trim();
+    }
+
+    const gid = uid("G");
+    const color = PALETTE[colorIdx % PALETTE.length]; colorIdx++;
+    const parsedBookings = parseBookingBlocks(bodyText);
+    parsedBookings.forEach(b=>{ b.groupId = gid; bookings.push(b); });
+
+    const actualPax = parsedBookings.reduce((s,b)=>s+b.pax,0);
+    groups.push({ id: gid, name, chauffeur: "", guide, cap: parsedCap || actualPax || 17, color });
+  });
+
+  return { groups, bookings };
+}
+
+/* ============ EXPORT: build grouped text back out ============ */
+function buildGroupFullText(g){
+  const bs = state.bookings.filter(b=>b.groupId===g.id);
+  const pax = bs.reduce((s,b)=>s+b.pax,0);
+  const header = `${g.name.toUpperCase()} -   ${pax} PAX  -   : ${g.guide||""}`.replace(/\s+$/,"");
+  const dashes = "-".repeat(70);
+  let prevDate = null;
+  const blocks = bs.map((b,i)=>{
+    const lines = [];
+    if(i>0 && b.date !== prevDate) lines.push(b.date);
+    lines.push(`Lead traveler: ${b.name}`);
+    lines.push(`Phone: ${b.phone||""}`);
+    lines.push(`Email: ${b.email||""}`);
+    lines.push(`Pax: ${b.pax}`);
+    lines.push(`Pick up location: ${b.lat!=null ? `https://www.google.com/maps/place/${b.lat},${b.lng}` : ""}`);
+    prevDate = b.date;
+    return lines.join("\n");
+  });
+  return `${header}\n\n${dashes}\n` + blocks.join("\n\n");
+}
+function buildAllGroupsFullText(){
+  return state.groups.map(g=>buildGroupFullText(g)).join("\n\n========================================\n\n");
+}
+function buildGroupNameMapText(g){
+  const bs = state.bookings.filter(b=>b.groupId===g.id);
+  const pax = bs.reduce((s,b)=>s+b.pax,0);
+  const header = `${g.name.toUpperCase()} -   ${pax} PAX  -   : ${g.guide||""}`.replace(/\s+$/,"");
+  const dashes = "-".repeat(70);
+  const lines = bs.map(b=>`${b.name} — ${b.lat!=null ? `https://www.google.com/maps/place/${b.lat},${b.lng}` : "no location"}`);
+  return `${header}\n\n${dashes}\n` + lines.join("\n");
+}
+function buildAllGroupsNameMapText(){
+  return state.groups.map(g=>buildGroupNameMapText(g)).join("\n\n========================================\n\n");
+}
+function buildSummaryText(){
+  return state.groups.map((g,idx)=>`G${idx+1}, ${g.guide||"—"}, ${groupPax(g.id)}`).join("\n");
+}
+function copyText(text, label){
+  navigator.clipboard.writeText(text).then(()=>toast(label)).catch(()=>toast("Couldn't copy — check clipboard permissions"));
+}
+
+/* ============ IMPORT FLOW ============ */
+let pendingImport = null;
+document.getElementById("btnOpenImport").addEventListener("click",()=>{
+  document.getElementById("importArea").value = "";
+  document.getElementById("importPreview").style.display = "none";
+  document.getElementById("btnConfirmImport").style.display = "none";
+  document.getElementById("modalImport").classList.add("show");
+});
+document.getElementById("btnParseImport").addEventListener("click",()=>{
+  const text = document.getElementById("importArea").value;
+  if(!text.trim()){ toast("Paste the grouped export first"); return; }
+  const result = parseGroupedExport(text);
+  const preview = document.getElementById("importPreview");
+  if(result.groups.length===0){
+    preview.style.display="block";
+    preview.innerHTML = `<div class="parse-row">Couldn't detect any groups in this text.</div>`;
+    document.getElementById("btnConfirmImport").style.display = "none";
+    return;
+  }
+  pendingImport = result;
+  const totalPax = result.bookings.reduce((s,b)=>s+b.pax,0);
+  preview.style.display = "block";
+  preview.innerHTML = result.groups.map(g=>{
+    const count = result.bookings.filter(b=>b.groupId===g.id).length;
+    const pax = result.bookings.filter(b=>b.groupId===g.id).reduce((s,b)=>s+b.pax,0);
+    return `<div class="parse-row"><b>${escapeHtml(g.name)}</b> — ${escapeHtml(g.guide||"no guide")} — ${count} bookings, ${pax} pax</div>`;
+  }).join("") + `<div class="parse-row" style="background:var(--paper);font-weight:700;">${result.groups.length} groups · ${result.bookings.length} bookings · ${totalPax} pax total</div>`;
+  document.getElementById("btnConfirmImport").style.display = "inline-flex";
+});
+document.getElementById("btnConfirmImport").addEventListener("click",()=>{
+  if(!pendingImport) return;
+  state.groups.push(...pendingImport.groups);
+  state.bookings.push(...pendingImport.bookings);
+  saveG(); saveB();
+  state.hasFitOnce = false;
+  renderAll();
+  document.getElementById("modalImport").classList.remove("show");
+  toast(`Imported ${pendingImport.groups.length} group(s), ${pendingImport.bookings.length} booking(s)`);
+  pendingImport = null;
+});
+
+/* ============ COPY FLOW ============ */
+document.getElementById("btnOpenCopy").addEventListener("click",()=>{
+  if(state.groups.length===0){ toast("No groups yet — import some first"); return; }
+  document.getElementById("modalCopy").classList.add("show");
+});
+document.getElementById("btnCopyAllFull").addEventListener("click",()=>{
+  copyText(buildAllGroupsFullText(), "All groups copied — full details");
+  document.getElementById("modalCopy").classList.remove("show");
+});
+document.getElementById("btnCopyAllNameMap").addEventListener("click",()=>{
+  copyText(buildAllGroupsNameMapText(), "All groups copied — name + map only");
+  document.getElementById("modalCopy").classList.remove("show");
+});
+document.getElementById("btnCopySummary").addEventListener("click",()=>{
+  copyText(buildSummaryText(), "Summary copied");
+  document.getElementById("modalCopy").classList.remove("show");
+});
+
+/* ============ TAB SWITCHING (mobile) ============ */
+document.querySelectorAll(".tab-btn").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+    document.getElementById("view-"+btn.dataset.tab).classList.add("active");
+    if(btn.dataset.tab==="map" && state.map) state.map.resize();
+  });
+});
+
+/* ============ MAP ============ */
+function initMap(){
+  if(!MAPBOX_TOKEN || MAPBOX_TOKEN==="YOUR_MAPBOX_TOKEN_HERE"){
+    document.getElementById("tokenWarning").style.display="flex"; return;
+  }
+  mapboxgl.accessToken = MAPBOX_TOKEN;
+  state.map = new mapboxgl.Map({
+    container:"mapbox", style:"mapbox://styles/mapbox/light-v11",
+    center:[-8.0,31.63], zoom:11.5,
+    touchZoomRotate:true, scrollZoom:true, doubleClickZoom:true, dragPan:true
+  });
+  state.map.touchZoomRotate.enable();
+  state.map.touchZoomRotate.disableRotation(); // pinch zooms only, doesn't rotate — avoids accidental tilted maps on mobile
+  state.map.addControl(new mapboxgl.NavigationControl({showCompass:false}), "top-right");
+  state.map.on("load", renderMapMarkers);
+}
+
+function renderMapMarkers(){
+  if(!state.map) return;
+  Object.values(state.markers).forEach(m=>m.remove());
+  state.markers = {};
+
+  const bookings = state.bookings.filter(b=> b.lat!=null &&
+    (!state.mapFilterGroup || b.groupId===state.mapFilterGroup));
+
+  bookings.forEach(b=>{
+    const g = b.groupId ? getGroup(b.groupId) : null;
+    const color = g ? g.color : "#8B93A1";
+    const selected = state.selectedIds.has(b.id);
+    const el = document.createElement("div");
+    el.className = "marker-pin" + (selected ? " selected" : "");
+    el.style.background = color;
+    const label = document.createElement("div");
+    label.className = "marker-pin-label";
+    label.textContent = b.pax;
+    el.appendChild(label);
+    el.addEventListener("click",e=>{
+      e.stopPropagation();
+      if(state.selectedIds.has(b.id)) state.selectedIds.delete(b.id); else state.selectedIds.add(b.id);
+      renderMapMarkers(); renderList(); renderGroupsView(); updateSelBar();
+      const m = state.markers[b.id]; if(m) m.togglePopup();
+    });
+    const marker = new mapboxgl.Marker({element:el, anchor:"bottom"})
+      .setLngLat([b.lng,b.lat])
+      .setPopup(new mapboxgl.Popup({offset:20}).setHTML(`
+        <div class="popup-group" style="color:${color}">${g ? escapeHtml(g.name) : "UNASSIGNED"}</div>
+        <div class="popup-name">${escapeHtml(b.name)}</div>
+        <div class="popup-meta">${b.pax} pax · ${b.date}</div>
+      `))
+      .addTo(state.map);
+    state.markers[b.id] = marker;
+  });
+
+  if(bookings.length>0 && !state.hasFitOnce){
+    const bounds = new mapboxgl.LngLatBounds();
+    bookings.forEach(b=>bounds.extend([b.lng,b.lat]));
+    state.map.fitBounds(bounds,{padding:50,maxZoom:15});
+    state.hasFitOnce = true;
+  }
+}
+
+/* ============ LEGEND (mobile bottom sheet) ============ */
+function renderLegend(){
+  const body = document.getElementById("legendBody");
+  if(state.groups.length===0){
+    body.innerHTML = `<div class="empty-state">No groups yet. Tap the + button to import a grouped export.</div>`;
+    return;
+  }
+  body.innerHTML = `<div class="legend-row" data-id="">
+      <span class="legend-dot" style="background:#8B93A1"></span>
+      <div class="legend-info"><div class="legend-name">All groups</div></div>
+    </div>` + state.groups.map(g=>{
+    const pax = groupPax(g.id);
+    const over = pax > g.cap;
+    const count = state.bookings.filter(b=>b.groupId===g.id).length;
+    return `<div class="legend-row" data-id="${g.id}">
+      <span class="legend-dot" style="background:${g.color}"></span>
+      <div class="legend-info">
+        <div class="legend-name">${escapeHtml(g.name)}</div>
+        <div class="legend-meta">${escapeHtml(g.chauffeur||"No chauffeur")} · ${escapeHtml(g.guide||"No guide")} · ${count} bookings</div>
+      </div>
+      <span class="legend-pax ${over?'over':''}">${pax}/${g.cap}</span>
+    </div>`;
+  }).join("");
+  body.querySelectorAll(".legend-row").forEach(row=>{
+    row.addEventListener("click",()=>{
+      state.mapFilterGroup = row.dataset.id || null;
+      document.getElementById("legendSheet").classList.remove("show");
+      state.hasFitOnce = false;
+      renderMapMarkers();
+      renderLegend();
+    });
+  });
+}
+document.getElementById("btnLegend").addEventListener("click",()=>{
+  renderLegend();
+  document.getElementById("legendSheet").classList.add("show");
+});
+document.getElementById("btnLegendClose").addEventListener("click",()=>{
+  document.getElementById("legendSheet").classList.remove("show");
+});
+
+/* ============ LIST (mobile + desktop reuse) ============ */
+function bookingRowHtml(b){
+  const g = b.groupId ? getGroup(b.groupId) : null;
+  const sel = state.selectedIds.has(b.id);
+  return `
+  <div class="booking-row ${sel?'selected':''}" data-id="${b.id}">
+    <input type="checkbox" class="booking-check chk" data-id="${b.id}" ${sel?'checked':''}>
+    <div class="booking-body">
+      <div class="booking-name">${escapeHtml(b.name)}</div>
+      <div class="booking-meta">${b.pax} pax · ${b.date}${b.lat==null?' · no location':''}</div>
+      ${g ? `<span class="booking-group-chip" style="background:${g.color}">${escapeHtml(g.name)}</span>` : `<span class="booking-group-chip" style="background:#8B93A1">unassigned</span>`}
+    </div>
+    <div class="booking-actions">
+      <button class="tap-btn delete-booking" data-id="${b.id}" title="Delete"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+    </div>
+  </div>`;
+}
+function wireBookingRows(container){
+  container.querySelectorAll(".chk").forEach(cb=>{
+    cb.addEventListener("change",e=>{
+      const id = e.target.dataset.id;
+      if(e.target.checked) state.selectedIds.add(id); else state.selectedIds.delete(id);
+      renderAll();
+    });
+  });
+  container.querySelectorAll(".delete-booking").forEach(btn=>{
+    btn.addEventListener("click",e=>{
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const b = state.bookings.find(x=>x.id===id);
+      if(!b) return;
+      if(!confirm(`Delete booking "${b.name}"?`)) return;
+      state.bookings = state.bookings.filter(x=>x.id!==id);
+      state.selectedIds.delete(id);
+      saveB(); renderAll();
+      toast("Booking deleted");
+    });
+  });
+  container.querySelectorAll(".booking-row").forEach(row=>{
+    row.addEventListener("click",e=>{
+      if(e.target.classList.contains("chk") || e.target.closest(".delete-booking")) return;
+      const id = row.dataset.id;
+      if(state.selectedIds.has(id)) state.selectedIds.delete(id); else state.selectedIds.add(id);
+      renderAll();
+    });
+  });
+}
+function renderList(){
+  const q = state.searchQuery.trim().toLowerCase();
+  let rows = state.bookings;
+  if(q) rows = rows.filter(b=>(b.name||"").toLowerCase().includes(q) || (b.phone||"").toLowerCase().includes(q));
+
+  const html = rows.length===0
+    ? `<div class="empty-state">${state.bookings.length===0 ? 'No bookings yet — import a grouped export to get started.' : 'No bookings match that search.'}</div>`
+    : rows.map(bookingRowHtml).join("");
+
+  const mobileEl = document.getElementById("listBody");
+  mobileEl.innerHTML = html; wireBookingRows(mobileEl);
+
+  const desktopEl = document.getElementById("desktopList");
+  desktopEl.innerHTML = `<div class="list-toolbar"><input type="text" class="search-input" id="searchBookingDesktop" placeholder="Search name or phone…" value="${escapeHtml(state.searchQuery)}"></div><div class="list-scroll">${html}</div>`;
+  wireBookingRows(desktopEl);
+  const dSearch = document.getElementById("searchBookingDesktop");
+  if(dSearch) dSearch.addEventListener("input",e=>{ state.searchQuery = e.target.value; renderList(); });
+}
+
+/* ============ GROUPS VIEW (mobile + desktop reuse) ============ */
+function groupCardHtml(g){
+  const pax = groupPax(g.id);
+  const over = pax > g.cap;
+  const count = state.bookings.filter(b=>b.groupId===g.id).length;
+  return `
+  <div class="group-card" data-id="${g.id}">
+    <div class="group-card-bar" style="background:${g.color}"></div>
+    <div class="group-card-body">
+      <div class="group-card-top">
+        <span class="group-card-name">${escapeHtml(g.name)}</span>
+        <span class="group-card-pax ${over?'over':''}">${pax}/${g.cap}</span>
+      </div>
+      <div class="group-cap-bar"><div class="group-cap-fill ${over?'over':''}" style="width:${Math.min(100,pax/g.cap*100)}%;background:${g.color}"></div></div>
+      <div class="group-card-guide">${escapeHtml(g.chauffeur||"No chauffeur")} · ${escapeHtml(g.guide||"No guide")} · ${count} bookings</div>
+      <div class="group-card-actions">
+        <button class="chip-btn filter-group" data-id="${g.id}"><svg viewBox="0 0 24 24"><path d="M9 20l-5-2V4l5 2 6-2 5 2v14l-5-2-6 2z"/></svg>Map</button>
+        <button class="chip-btn copy-full" data-id="${g.id}"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="1"/><path d="M5 15V5a1 1 0 011-1h10"/></svg>Copy</button>
+        <button class="chip-btn edit-group" data-id="${g.id}"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16v4z"/></svg>Edit</button>
+      </div>
+    </div>
+  </div>`;
+}
+function wireGroupCards(container){
+  container.querySelectorAll(".filter-group").forEach(btn=>{
+    btn.addEventListener("click",e=>{
+      e.stopPropagation();
+      state.mapFilterGroup = btn.dataset.id;
+      state.hasFitOnce = false;
+      document.querySelector('.tab-btn[data-tab="map"]')?.click();
+      renderMapMarkers();
+    });
+  });
+  container.querySelectorAll(".copy-full").forEach(btn=>{
+    btn.addEventListener("click",e=>{
+      e.stopPropagation();
+      const g = getGroup(btn.dataset.id);
+      copyText(buildGroupFullText(g), `${g.name} copied`);
+    });
+  });
+  container.querySelectorAll(".edit-group").forEach(btn=>{
+    btn.addEventListener("click",e=>{ e.stopPropagation(); openGroupModal(btn.dataset.id); });
+  });
+}
+function renderGroupsView(){
+  const html = state.groups.length===0
+    ? `<div class="empty-state">No groups yet — import a grouped export to get started.</div>`
+    : state.groups.map(groupCardHtml).join("");
+
+  const mobileEl = document.getElementById("groupsBody");
+  mobileEl.innerHTML = html; wireGroupCards(mobileEl);
+
+  const desktopEl = document.getElementById("desktopGroups");
+  desktopEl.innerHTML = `<div class="groups-toolbar"><button class="btn btn-sm btn-amber" id="btnNewGroupDesktop"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New group</button></div><div class="groups-scroll">${html}</div>`;
+  wireGroupCards(desktopEl);
+  const dNew = document.getElementById("btnNewGroupDesktop");
+  if(dNew) dNew.addEventListener("click",()=>openGroupModal(null));
+
+  const sel = document.getElementById("selMoveGroup");
+  sel.innerHTML = '<option value="">Move to group…</option>' + state.groups.map(g=>{
+    const pax = groupPax(g.id);
+    return `<option value="${g.id}">${escapeHtml(g.name)} (${pax}/${g.cap})</option>`;
+  }).join("");
+}
+document.getElementById("btnNewGroupMobile").addEventListener("click",()=>openGroupModal(null));
+
+/* ============ GROUP EDIT MODAL ============ */
+let currentGroupId = null;
+function openGroupModal(id){
+  currentGroupId = id;
+  const g = id ? getGroup(id) : null;
+  document.getElementById("groupModalTitle").textContent = g ? "Edit group" : "New group";
+  document.getElementById("g_name").value = g ? g.name : `Group ${state.groups.length+1}`;
+  document.getElementById("g_chauffeur").value = g ? (g.chauffeur||"") : "";
+  document.getElementById("g_guide").value = g ? (g.guide||"") : "";
+  document.getElementById("g_cap").value = g ? g.cap : 17;
+  document.getElementById("g_color").value = g ? g.color : PALETTE[state.groups.length % PALETTE.length];
+  document.getElementById("btnDeleteGroup").style.display = g ? "inline-flex" : "none";
+  document.getElementById("modalGroup").classList.add("show");
+}
+document.getElementById("btnSaveGroup").addEventListener("click",()=>{
+  const name = document.getElementById("g_name").value.trim();
+  if(!name){ toast("Group name required"); return; }
+  const chauffeur = document.getElementById("g_chauffeur").value.trim();
+  const guide = document.getElementById("g_guide").value.trim();
+  const cap = parseInt(document.getElementById("g_cap").value)||17;
+  const color = document.getElementById("g_color").value;
+  if(currentGroupId){
+    Object.assign(getGroup(currentGroupId), {name,chauffeur,guide,cap,color});
+  } else {
+    state.groups.push({id: uid("G"), name, chauffeur, guide, cap, color});
+  }
+  saveG(); renderAll();
+  document.getElementById("modalGroup").classList.remove("show");
+  toast("Group saved");
+});
+document.getElementById("btnDeleteGroup").addEventListener("click",()=>{
+  if(!confirm("Delete this group? Its bookings become unassigned.")) return;
+  state.bookings.forEach(b=>{ if(b.groupId===currentGroupId) b.groupId=null; });
+  state.groups = state.groups.filter(g=>g.id!==currentGroupId);
+  if(state.mapFilterGroup===currentGroupId) state.mapFilterGroup=null;
+  saveB(); saveG(); renderAll();
+  document.getElementById("modalGroup").classList.remove("show");
+  toast("Group deleted");
+});
+
+document.querySelectorAll("[data-close]").forEach(el=>{
+  el.addEventListener("click",e=>e.target.closest(".overlay").classList.remove("show"));
+});
+document.querySelectorAll(".overlay").forEach(ov=>{
+  ov.addEventListener("click",e=>{ if(e.target===ov) ov.classList.remove("show"); });
+});
+
+/* ============ SELECTION BAR (move between groups / new group / delete) ============ */
+function updateSelBar(){
+  const bar = document.getElementById("selBar");
+  const n = state.selectedIds.size;
+  if(n>0){ bar.classList.add("show"); document.getElementById("selCount").textContent = `${n} selected`; }
+  else bar.classList.remove("show");
+}
+document.getElementById("selClose").addEventListener("click",()=>{
+  state.selectedIds.clear(); renderAll();
+});
+document.getElementById("selMoveBtn").addEventListener("click",()=>{
+  const gid = document.getElementById("selMoveGroup").value;
+  if(!gid){ toast("Choose a group first"); return; }
+  state.selectedIds.forEach(id=>{ const b=state.bookings.find(x=>x.id===id); if(b) b.groupId=gid; });
+  saveB();
+  const n = state.selectedIds.size;
+  state.selectedIds.clear();
+  renderAll();
+  toast(`${n} booking(s) moved`);
+});
+document.getElementById("selNewGroupBtn").addEventListener("click",()=>{
+  const gid = uid("G");
+  const color = PALETTE[state.groups.length % PALETTE.length];
+  const name = `Group ${state.groups.length+1}`;
+  state.groups.push({id:gid, name, chauffeur:"", guide:"", cap:17, color});
+  state.selectedIds.forEach(id=>{ const b=state.bookings.find(x=>x.id===id); if(b) b.groupId=gid; });
+  saveG(); saveB();
+  const n = state.selectedIds.size;
+  state.selectedIds.clear();
+  renderAll();
+  toast(`New group created with ${n} booking(s) — tap it to rename or add a guide`);
+});
+document.getElementById("selDeleteBtn").addEventListener("click",()=>{
+  const n = state.selectedIds.size;
+  if(!confirm(`Delete ${n} selected booking(s)? This cannot be undone.`)) return;
+  state.bookings = state.bookings.filter(b=>!state.selectedIds.has(b.id));
+  state.selectedIds.clear();
+  saveB(); renderAll();
+  toast(`${n} booking(s) deleted`);
+});
+
+/* ============ SEARCH (mobile) ============ */
+document.getElementById("searchBooking").addEventListener("input",e=>{
+  state.searchQuery = e.target.value;
+  renderList();
+});
+
+/* ============ HEADER STATS ============ */
+function renderHeaderStats(){
+  const pax = state.bookings.reduce((s,b)=>s+b.pax,0);
+  document.getElementById("headerStats").textContent = `${state.groups.length} groups · ${state.bookings.length} bookings · ${pax} pax`;
+}
+
+/* ============ MASTER RENDER ============ */
+function renderAll(){
+  renderHeaderStats();
+  renderMapMarkers();
+  renderList();
+  renderGroupsView();
+  updateSelBar();
+}
+
+initMap();
+renderAll();
+</script>
+</body>
+</html>

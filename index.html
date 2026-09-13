@@ -144,18 +144,34 @@ input,select,textarea{font-family:inherit;font-size:16px;} /* 16px avoids iOS zo
   padding:12px 14px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0;
   display:flex;gap:8px;flex-wrap:wrap;
 }
-.groups-scroll{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;}
-.group-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
-.group-card-bar{height:5px;}
+.groups-overview{flex:1;min-width:190px;}
+.groups-overview-title{font-size:15px;font-weight:700;}
+.groups-overview-meta{font-size:12px;color:var(--text-soft);margin-top:2px;}
+.group-filter{width:100%;margin-top:10px;}
+.groups-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px 14px 24px;display:flex;flex-direction:column;gap:10px;}
+.group-card{flex:0 0 auto;min-height:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 2px rgba(20,24,28,.05);}
+.group-card-bar{height:8px;flex:none;}
 .group-card-body{padding:12px 14px;}
-.group-card-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+.group-card-top{display:flex;justify-content:space-between;align-items:center;gap:8px;}
 .group-card-name{font-weight:700;font-size:14.5px;}
+.group-color-control{display:flex;align-items:center;gap:9px;margin-top:11px;padding:9px 10px;background:var(--paper);border:1px solid var(--line);border-radius:7px;}
+.group-color-picker{width:38px;height:38px;padding:2px;border:2px solid #fff;border-radius:50%;background:transparent;box-shadow:0 0 0 1px var(--line-strong),0 1px 3px rgba(0,0,0,.18);flex-shrink:0;cursor:pointer;}
+.group-color-copy{min-width:0;flex:1;}
+.group-color-label{font-size:11px;color:var(--text-soft);font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+.group-color-value{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;margin-top:2px;}
+.group-color-hint{font-size:11px;color:var(--text-soft);margin-top:1px;}
 .group-card-pax{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text-soft);}
 .group-card-pax.over{color:var(--bad);font-weight:700;}
 .group-cap-bar{height:5px;border-radius:3px;background:var(--paper);overflow:hidden;margin-top:8px;}
 .group-cap-fill{height:100%;}
 .group-cap-fill.over{background:var(--bad) !important;}
 .group-card-guide{font-size:12.5px;color:var(--text-soft);margin-top:7px;}
+.group-card-contact{display:flex;align-items:center;gap:8px;margin-top:11px;padding:9px 10px;background:var(--paper);border-radius:6px;font-size:12.5px;}
+.group-card-contact svg{width:16px;height:16px;stroke:var(--teal);fill:none;stroke-width:1.8;flex-shrink:0;}
+.group-card-contact strong{font-size:11px;color:var(--text-soft);font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
+.group-card-contact span{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.group-card-contact.missing{color:var(--text-soft);border:1px dashed var(--line-strong);background:transparent;}
+.group-card-contact.missing svg{stroke:var(--text-soft);}
 .group-card-actions{display:flex;gap:6px;margin-top:10px;}
 .chip-btn{
   flex:1;border:1px solid var(--line);background:var(--paper);border-radius:6px;padding:8px 6px;
@@ -313,7 +329,12 @@ input,select,textarea{font-family:inherit;font-size:16px;} /* 16px avoids iOS zo
   <!-- GROUPS VIEW (mobile) -->
   <div class="view" id="view-groups">
     <div class="groups-toolbar">
+      <div class="groups-overview">
+        <div class="groups-overview-title">Your groups</div>
+        <div class="groups-overview-meta" id="groupsOverviewMeta">0 groups · 0 passengers</div>
+      </div>
       <button class="btn btn-sm btn-amber" id="btnNewGroupMobile"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New group</button>
+      <input type="text" class="search-input group-filter" id="searchGroup" placeholder="Find a group or chauffeur…">
     </div>
     <div class="groups-scroll" id="groupsBody"></div>
   </div>
@@ -404,7 +425,7 @@ input,select,textarea{font-family:inherit;font-size:16px;} /* 16px avoids iOS zo
       </div>
       <div class="form-2col">
         <div class="form-row"><label>Max pax</label><input type="number" id="g_cap" value="17" min="1"></div>
-        <div class="form-row"><label>Color</label><input type="color" id="g_color" value="#2B7A78" style="height:44px;padding:2px;"></div>
+        <div class="form-row"><label>Group color</label><input type="color" id="g_color" value="#2B7A78" style="height:44px;padding:2px;"><div class="hint">This color appears on the group card, map markers, and booking labels.</div></div>
       </div>
     </div>
     <div class="sheet-foot">
@@ -816,11 +837,20 @@ function groupCardHtml(g){
         <span class="group-card-pax ${over?'over':''}">${pax}/${g.cap}</span>
       </div>
       <div class="group-cap-bar"><div class="group-cap-fill ${over?'over':''}" style="width:${Math.min(100,pax/g.cap*100)}%;background:${g.color}"></div></div>
-      <div class="group-card-guide">${escapeHtml(g.chauffeur||"No chauffeur")} · ${escapeHtml(g.guide||"No guide")} · ${count} bookings</div>
+      <div class="group-color-control">
+        <input class="group-color-picker quick-color" type="color" value="${g.color}" data-id="${g.id}" aria-label="Change color for ${escapeHtml(g.name)}" title="Change group color">
+        <div class="group-color-copy"><div class="group-color-label">Group color</div><div class="group-color-value">${g.color.toUpperCase()}</div><div class="group-color-hint">Tap the swatch to change</div></div>
+      </div>
+      <div class="group-card-contact ${g.chauffeur?'':'missing'}">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"/><path d="M5 21c.7-4 3-6 7-6s6.3 2 7 6"/></svg>
+        <strong>Chauffeur</strong>
+        <span>${escapeHtml(g.chauffeur||"Add chauffeur name")}</span>
+      </div>
+      <div class="group-card-guide">Guide: ${escapeHtml(g.guide||"Not assigned")} · ${count} bookings</div>
       <div class="group-card-actions">
         <button class="chip-btn filter-group" data-id="${g.id}"><svg viewBox="0 0 24 24"><path d="M9 20l-5-2V4l5 2 6-2 5 2v14l-5-2-6 2z"/></svg>Map</button>
         <button class="chip-btn copy-full" data-id="${g.id}"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="1"/><path d="M5 15V5a1 1 0 011-1h10"/></svg>Copy</button>
-        <button class="chip-btn edit-group" data-id="${g.id}"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16v4z"/></svg>Edit</button>
+        <button class="chip-btn edit-group" data-id="${g.id}"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16v4z"/></svg>Edit group</button>
       </div>
     </div>
   </div>`;
@@ -845,20 +875,46 @@ function wireGroupCards(container){
   container.querySelectorAll(".edit-group").forEach(btn=>{
     btn.addEventListener("click",e=>{ e.stopPropagation(); openGroupModal(btn.dataset.id); });
   });
+  container.querySelectorAll(".quick-color").forEach(input=>{
+    input.addEventListener("click",e=>e.stopPropagation());
+    input.addEventListener("change",e=>{
+      e.stopPropagation();
+      const g = getGroup(input.dataset.id);
+      if(!g) return;
+      g.color = input.value.toUpperCase();
+      saveG();
+      renderAll();
+      toast(`${g.name} color updated`);
+    });
+  });
 }
 function renderGroupsView(){
+  const query = (state.groupQuery||"").trim().toLowerCase();
+  const visibleGroups = state.groups.filter(g=>!query || `${g.name} ${g.chauffeur||""} ${g.guide||""}`.toLowerCase().includes(query));
+  const totalPax = state.bookings.reduce((sum,b)=>sum+b.pax,0);
+  const overview = document.getElementById("groupsOverviewMeta");
+  if(overview) overview.textContent = `${state.groups.length} group${state.groups.length===1?'':'s'} · ${totalPax} passenger${totalPax===1?'':'s'}`;
   const html = state.groups.length===0
     ? `<div class="empty-state">No groups yet — import a grouped export to get started.</div>`
-    : state.groups.map(groupCardHtml).join("");
+    : visibleGroups.length===0
+      ? `<div class="empty-state">No groups match “${escapeHtml(query)}”.</div>`
+      : visibleGroups.map(groupCardHtml).join("");
 
   const mobileEl = document.getElementById("groupsBody");
   mobileEl.innerHTML = html; wireGroupCards(mobileEl);
 
   const desktopEl = document.getElementById("desktopGroups");
-  desktopEl.innerHTML = `<div class="groups-toolbar"><button class="btn btn-sm btn-amber" id="btnNewGroupDesktop"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New group</button></div><div class="groups-scroll">${html}</div>`;
+  desktopEl.innerHTML = `<div class="groups-toolbar"><div class="groups-overview"><div class="groups-overview-title">Your groups</div><div class="groups-overview-meta">${state.groups.length} groups · ${totalPax} passengers</div></div><button class="btn btn-sm btn-amber" id="btnNewGroupDesktop"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New group</button><input type="text" class="search-input group-filter" id="searchGroupDesktop" placeholder="Find a group or chauffeur…" value="${escapeHtml(state.groupQuery||"")}"></div><div class="groups-scroll">${html}</div>`;
   wireGroupCards(desktopEl);
   const dNew = document.getElementById("btnNewGroupDesktop");
   if(dNew) dNew.addEventListener("click",()=>openGroupModal(null));
+  const dSearch = document.getElementById("searchGroupDesktop");
+  if(dSearch) dSearch.addEventListener("input",e=>{
+    state.groupQuery=e.target.value;
+    renderGroupsView();
+    const refreshedSearch = document.getElementById("searchGroupDesktop");
+    if(refreshedSearch){ refreshedSearch.focus(); refreshedSearch.setSelectionRange(state.groupQuery.length,state.groupQuery.length); }
+  });
 
   const sel = document.getElementById("selMoveGroup");
   sel.innerHTML = '<option value="">Move to group…</option>' + state.groups.map(g=>{
@@ -867,6 +923,7 @@ function renderGroupsView(){
   }).join("");
 }
 document.getElementById("btnNewGroupMobile").addEventListener("click",()=>openGroupModal(null));
+document.getElementById("searchGroup").addEventListener("input",e=>{ state.groupQuery=e.target.value; renderGroupsView(); });
 
 /* ============ GROUP EDIT MODAL ============ */
 let currentGroupId = null;

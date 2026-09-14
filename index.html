@@ -34,6 +34,7 @@ input,select,textarea{font-family:inherit;font-size:16px;} /* 16px avoids iOS zo
 .topbar-mini h1{font-size:14px;margin:0;font-weight:700;letter-spacing:.01em;}
 .topbar-mini .sub{font-size:11px;color:#9AA3AD;font-family:'IBM Plex Mono',monospace;}
 .topbar-actions{display:flex;gap:6px;}
+.mobile-clear{display:flex;}
 .icon-round{
   width:38px;height:38px;border-radius:50%;background:var(--ink-soft);border:1px solid #3A4149;
   color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;
@@ -141,14 +142,14 @@ input,select,textarea{font-family:inherit;font-size:16px;} /* 16px avoids iOS zo
 
 /* ===== GROUPS VIEW ===== */
 .groups-toolbar{
-  padding:12px 14px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0;
-  display:flex;gap:8px;flex-wrap:wrap;
+  padding:12px 14px;background:var(--surface);border-bottom:1px solid var(--line);flex:0 0 auto;
+  display:flex;gap:8px;flex-wrap:wrap;position:relative;z-index:1;
 }
 .groups-overview{flex:1;min-width:190px;}
 .groups-overview-title{font-size:15px;font-weight:700;}
 .groups-overview-meta{font-size:12px;color:var(--text-soft);margin-top:2px;}
 .group-filter{width:100%;margin-top:10px;}
-.groups-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px 14px 24px;display:flex;flex-direction:column;gap:10px;}
+.groups-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:12px 14px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;}
 .group-card{flex:0 0 auto;min-height:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 2px rgba(20,24,28,.05);}
 .group-card-bar{height:8px;flex:none;}
 .group-card-body{padding:12px 14px;}
@@ -266,6 +267,7 @@ input,select,textarea{font-family:inherit;font-size:16px;} /* 16px avoids iOS zo
   #mapWrap{flex:1;}
   .legend-fab{display:none;}
   .selbar{left:auto;right:20px;bottom:20px;max-width:420px;border-radius:16px;}
+  .mobile-clear{display:none;}
 }
 @media (max-width:859px){
   .desktop-side{display:none !important;}
@@ -280,6 +282,9 @@ input,select,textarea{font-family:inherit;font-size:16px;} /* 16px avoids iOS zo
     <div class="sub" id="headerStats">0 groups · 0 bookings</div>
   </div>
   <div class="topbar-actions">
+    <button class="icon-round mobile-clear" id="btnClearMobile" title="Clear dashboard" aria-label="Clear dashboard">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+    </button>
     <button class="icon-round" id="btnOpenCopy" title="Copy grouped text">
       <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 011-1h10"/></svg>
     </button>
@@ -592,6 +597,22 @@ document.getElementById("btnOpenImport").addEventListener("click",()=>{
   document.getElementById("importPreview").style.display = "none";
   document.getElementById("btnConfirmImport").style.display = "none";
   document.getElementById("modalImport").classList.add("show");
+});
+document.getElementById("btnClearMobile").addEventListener("click",()=>{
+  if(!state.groups.length && !state.bookings.length){ toast("Dashboard is already empty"); return; }
+  if(!confirm("Clear all groups and bookings from this device? This cannot be undone.")) return;
+  state.groups = [];
+  state.bookings = [];
+  state.selectedIds.clear();
+  state.mapFilterGroup = null;
+  state.searchQuery = "";
+  state.groupQuery = "";
+  saveG(); saveB();
+  document.getElementById("searchBooking").value = "";
+  document.getElementById("searchGroup").value = "";
+  state.hasFitOnce = false;
+  renderAll();
+  toast("Dashboard cleared");
 });
 document.getElementById("btnParseImport").addEventListener("click",()=>{
   const text = document.getElementById("importArea").value;
